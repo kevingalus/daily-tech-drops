@@ -4,6 +4,7 @@
   python -m dtd preview --week weeks/2026-10-26.yaml   print a markdown preview of the week
   python -m dtd post-due                               post the next product whose time has come
   python -m dtd reply                                  DM the link to anyone who commented the keyword
+  python -m dtd report                                 write the weekly performance report to reports/
   python -m dtd refresh-token                          print a refreshed Instagram token
 """
 
@@ -17,7 +18,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import instagram
+from . import instagram, report
 from .carousel import render_carousel
 from .config import EASTERN, OUTPUT_DIR, affiliate_link, env, load_all_weeks, load_config, load_week, read_state, write_state
 from .reel import render_reel
@@ -116,7 +117,8 @@ def reply(cfg: dict) -> int:
         return 0
     keyword = cfg["instagram"]["comment_keyword"].lower()
     handle = cfg["brand"]["handle"].lower()
-    by_media = {m: h for h in read_state("history", []) for m in h.get("media_ids", [])}
+    history = read_state("history", [])
+    by_media = {m: h for h in history for m in h.get("media_ids", [])}
     replied = set(read_state("replied", []))
     sent = 0
     for media in instagram.recent_media(days=7):
@@ -131,18 +133,20 @@ def reply(cfg: dict) -> int:
                     instagram.private_reply(c["id"], post["dm_message"])
                     instagram.public_reply(c["id"], "Sent! Check your DMs.")
                     sent += 1
+                    post["dms"] = post.get("dms", 0) + 1  # counted for the weekly report
                 except instagram.InstagramError as e:
                     print(f"Reply to {c['id']} failed: {e}", file=sys.stderr)
                     continue
                 replied.add(c["id"])
     write_state("replied", sorted(replied))
+    write_state("history", history)
     print(f"Sent {sent} link DMs")
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="dtd")
-    parser.add_argument("command", choices=["render", "preview", "post-due", "reply", "refresh-token"])
+    parser.add_argument("command", choices=["render", "preview", "post-due", "reply", "report", "refresh-token"])
     parser.add_argument("--week", type=Path)
     parser.add_argument("--base", default="", help="media URL base for preview links")
     args = parser.parse_args()
@@ -155,6 +159,12 @@ def main() -> int:
         return post_due(cfg)
     if args.command == "reply":
         return reply(cfg)
+    if args.command == "report":
+        if not (env("IG_USER_ID") and env("IG_ACCESS_TOKEN")):
+            print("Instagram secrets not set yet; skipping.")
+            return 1
+        report.run()
+        return 0
     print(instagram.refresh_token())
     return 0
 

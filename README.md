@@ -14,7 +14,13 @@ then posts at its scheduled time, and anyone who comments **LINK** gets the affi
 | On that pull request | `Render week` | Renders every reel and carousel, stores them on the `media` branch, comments a preview |
 | You merge | | The week is approved |
 | Every 30 min | `Post and reply` | Posts the next product whose time has come; DMs the link to keyword comments |
+| Sunday late morning | `Weekly report` | Measures the last 7 days per post and lane, saves `reports/latest.md` for the Sunday research, opens an issue with the report |
 | 1st of the month | `Refresh Instagram token` | Renews the 60-day Instagram token |
+
+**Sunday research, read this:** if `reports/latest.md` exists, it is last week's performance report. Weight the new
+week toward the lanes, product types and hooks that earned the most link DMs, saves and shares, and away from the
+weakest, while still rotating lanes. Open the week's pull request body with two or three lines on what the report
+showed and how it shaped the picks.
 
 A post more than 6 hours late (for example, a week merged on Tuesday) is skipped rather than posted late.
 To pull one product, delete it from the week file before its time.
@@ -45,7 +51,8 @@ Settings > Secrets and variables > Actions.
 2. developers.facebook.com > My Apps > Create app > use case **Manage messaging and content on Instagram**.
 3. Under *API setup with Instagram login*, add the Instagram account and generate a token with:
    `instagram_business_basic`, `instagram_business_content_publish`,
-   `instagram_business_manage_comments`, `instagram_business_manage_messages`.
+   `instagram_business_manage_comments`, `instagram_business_manage_messages`,
+   `instagram_business_manage_insights` (for the weekly report).
 4. Copy the Instagram user ID and the token into the secrets above.
 5. While the app is in Development mode it works for your own account, which is all this needs.
 

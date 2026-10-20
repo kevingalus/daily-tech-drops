@@ -1,8 +1,9 @@
 """Instagram API with Instagram Login (graph.instagram.com).
 
 Needs IG_USER_ID and IG_ACCESS_TOKEN with the scopes instagram_business_basic,
-instagram_business_content_publish, instagram_business_manage_comments and
-instagram_business_manage_messages.
+instagram_business_content_publish, instagram_business_manage_comments,
+instagram_business_manage_messages and (for the weekly report)
+instagram_business_manage_insights.
 """
 
 import time
@@ -108,6 +109,62 @@ def private_reply(comment_id: str, text: str) -> None:
 def public_reply(comment_id: str, text: str) -> None:
     _, token = _creds()
     _call("POST", f"{API}/{comment_id}/replies", params={"message": text, "access_token": token})
+
+
+def account() -> dict:
+    user, token = _creds()
+    return _call("GET", f"{API}/{user}", params={"fields": "username,followers_count,media_count", "access_token": token})
+
+
+def media_since(since: datetime) -> list[dict]:
+    """Every post published at or after since, newest first."""
+    user, token = _creds()
+    fields = "id,timestamp,caption,media_type,media_product_type,permalink,like_count,comments_count"
+    url, params, found = f"{API}/{user}/media", {"fields": fields, "limit": 50, "access_token": token}, []
+    while url:
+        data = _call("GET", url, params=params)
+        page = data.get("data", [])
+        found += [m for m in page if _ts(m["timestamp"]) >= since]
+        if not page or _ts(page[-1]["timestamp"]) < since:
+            break
+        url, params = data.get("paging", {}).get("next"), None
+    return found
+
+
+def media_insights(media_id: str, metrics: list[str]) -> dict[str, float]:
+    """Lifetime totals per metric. Metrics Instagram rejects for this post are left out."""
+    _, token = _creds()
+    try:
+        data = _call("GET", f"{API}/{media_id}/insights", params={"metric": ",".join(metrics), "access_token": token})
+    except InstagramError:
+        # One unsupported metric fails the whole request, so fall back to asking one at a time.
+        if len(metrics) == 1:
+            return {}
+        return {k: v for m in metrics for k, v in media_insights(media_id, [m]).items()}
+    return {d["name"]: _value(d) for d in data.get("data", [])}
+
+
+def account_insights(metrics: list[str], since: datetime, until: datetime) -> dict[str, float]:
+    """Account totals over a window of up to 30 days."""
+    user, token = _creds()
+    out = {}
+    for metric in metrics:
+        try:
+            data = _call("GET", f"{API}/{user}/insights", params={
+                "metric": metric, "period": "day", "metric_type": "total_value",
+                "since": int(since.timestamp()), "until": int(until.timestamp()), "access_token": token,
+            })
+        except InstagramError as e:
+            print(f"Account metric {metric} unavailable: {e}")
+            continue
+        out.update({d["name"]: _value(d) for d in data.get("data", [])})
+    return out
+
+
+def _value(entry: dict) -> float:
+    if "total_value" in entry:
+        return entry["total_value"].get("value", 0)
+    return sum(v.get("value", 0) for v in entry.get("values", []) if isinstance(v.get("value"), (int, float)))
 
 
 def refresh_token() -> str:
